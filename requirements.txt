@@ -16,3 +16,4 @@ accelerate>=0.28.0
 scipy
 einops
 rouge-score
+python-dotenv

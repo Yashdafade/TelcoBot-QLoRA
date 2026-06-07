@@ -9,6 +9,32 @@
 import os
 import torch
 
+from huggingface_hub import login
+
+# Try loading from a .env file if python-dotenv is installed
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+# Read token from environment variables (for AMD Cloud, Local, or other clouds)
+hf_token = os.getenv("HF_TOKEN")
+
+# Fallback to Colab secrets if running in Google Colab
+if not hf_token:
+    try:
+        from google.colab import userdata
+        hf_token = userdata.get('HF_TOKEN')
+    except ImportError:
+        pass
+
+if hf_token:
+    login(token=hf_token)
+else:
+    print("Warning: HF_TOKEN not found. Gated dataset access may fail.")
+
+
 from transformers import (
     AutoModelForCausalLM,   # loads the LLM
     AutoTokenizer,           # loads the tokenizer (text → tokens)
@@ -80,7 +106,7 @@ lora_config = LoraConfig(
     lora_dropout=LORA_DROPOUT,
     bias="none",
     task_type=TaskType.CAUSAL_LM,
-    target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
 )
 
 model = get_peft_model(model, lora_config)
@@ -134,7 +160,7 @@ training_args = TrainingArguments(
     lr_scheduler_type="cosine",
     warmup_ratio=0.03,
     weight_decay=0.001,
-    fp16=True,
+    bf16=True,
     logging_steps=25,          # log more frequently (smaller dataset)
     save_steps=200,
     save_total_limit=2,
@@ -146,10 +172,8 @@ training_args = TrainingArguments(
 # ── 8. TRAINER ──────────────────────────────────────────────
 trainer = SFTTrainer(
     model=model,
-    tokenizer=tokenizer,
+    processing_class=tokenizer,   # ← updated
     train_dataset=dataset,
-    dataset_text_field="text",
-    max_seq_length=MAX_SEQ_LEN,
     args=training_args,
 )
 

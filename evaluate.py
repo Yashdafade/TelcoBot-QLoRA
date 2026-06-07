@@ -11,6 +11,31 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import PeftModel
 from datasets import load_dataset
 from rouge_score import rouge_scorer
+import os
+from huggingface_hub import login
+
+# Try loading from a .env file if python-dotenv is installed
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+# Read token from environment variables
+hf_token = os.getenv("HF_TOKEN")
+
+# Fallback to Colab secrets if running in Google Colab
+if not hf_token:
+    try:
+        from google.colab import userdata
+        hf_token = userdata.get('HF_TOKEN')
+    except ImportError:
+        pass
+
+if hf_token:
+    login(token=hf_token)
+else:
+    print("Warning: HF_TOKEN not found. Gated dataset access may fail.")
 
 
 # ── CONFIG ──────────────────────────────────────────────────
