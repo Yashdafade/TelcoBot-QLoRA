@@ -1,0 +1,18 @@
+# Core training libraries
+torch>=2.1.0
+transformers>=4.40.0
+datasets>=2.18.0
+peft>=0.10.0
+trl>=0.8.0
+
+# Quantization (QLoRA)
+bitsandbytes>=0.43.0
+
+# HuggingFace hub
+huggingface_hub>=0.22.0
+
+# Utilities
+accelerate>=0.28.0
+scipy
+einops
+rouge-score
