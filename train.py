@@ -43,7 +43,7 @@ from transformers import (
 )
 
 from peft import LoraConfig, get_peft_model, TaskType
-from trl import SFTTrainer
+from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
 from datasets import load_dataset
 
 
@@ -170,10 +170,15 @@ training_args = TrainingArguments(
 
 
 # ── 8. TRAINER ──────────────────────────────────────────────
+# Train only on the assistant's answers, ignoring loss on the prompt context
+response_template = "<|im_start|>assistant\n"
+collator = DataCollatorForCompletionOnlyLM(response_template=response_template, tokenizer=tokenizer)
+
 trainer = SFTTrainer(
     model=model,
-    processing_class=tokenizer,   # ← updated
+    processing_class=tokenizer,
     train_dataset=dataset,
+    data_collator=collator,
     args=training_args,
 )
 
