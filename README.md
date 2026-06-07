@@ -1,45 +1,23 @@
-# Financial Document Question Answering (DocVQA) on AMD GPUs
+# Financial Q&A LLM Fine-Tuning on AMD GPUs
 
-This repository contains a modular codebase for fine-tuning a text-based Large Language Model (LLM) to perform **Financial Document Question Answering (DocVQA)**. Designed as part of the **TCS AMD AI Hackathon**, this project runs on the **AMD Developer Cloud** utilizing the **ROCm ecosystem** for hardware acceleration on AMD GPUs.
-
----
-
-## 📌 Project Overview & Pivot
-
-- **Previous Scope:** Text-to-text IT support generation using `benjaminmacklin/IT_Support_V2`.
-- **Current Scope:** Context-Based Financial Document Question Answering (DocVQA) using the `majorSeaweed/financeQA_100K` dataset.
-- **Migration Strategy (Text-Only Context):** To fit a tight sprint timeline, we bypass raw image parsing and frame this as a **Context-Based Text QA** task. We fine-tune a model (e.g., `Qwen2.5-1.5B-Instruct` or similar) using **QLoRA** (4-bit quantization + LoRA adapters) to answer questions solely using extracted document details (OCR/Markdown text).
+This repository contains a modular codebase for fine-tuning the **Qwen2.5-1.5B-Instruct** model on financial data to perform context-based question answering. This project is configured to run on the **AMD Developer Cloud** utilizing the **ROCm ecosystem** for hardware acceleration on AMD GPUs.
 
 ---
 
-## 📊 Data Mapping & Formatting
+## 📌 Project Overview
 
-The raw dataset contains raw images, OCR/Markdown textual breakdowns of documents (metadata, key details, insights), and a JSON array of localized `[{"question": "...", "answer": "..."}]` pairs.
-
-During preprocessing, each row is exploded into multiple training samples (one per question-answer pair) using the following instruction template:
-
-```markdown
-### System:
-You are an expert financial analysis AI. Answer the question accurately using ONLY the provided document details.
-
-### Document Details:
-[Insert Document Type + Key Details + Insights here]
-
-### Question:
-[Insert Question from JSON array]
-
-### Answer:
-[Insert Corresponding Answer from JSON array]
-```
+- **Dataset:** `sweatSmile/FinanceQA` — 3705 train, 927 test examples
+- **Task:** Context-based Financial Q&A — given company financial data + question, generate accurate answer
+- **Method:** QLoRA fine-tuning on `Qwen2.5-1.5B-Instruct`
 
 ---
 
 ## 🛠️ Project Architecture & State
 
 The codebase is modularly structured:
-- `train.py`: Preprocesses the `financeQA_100K` dataset, formats samples, and runs the QLoRA training loop.
-- `infer.py`: Handles model inference and side-by-side comparisons of the base model vs. the fine-tuned model.
-- `evaluate.py`: Computes validation metrics (ROUGE-1, ROUGE-2, ROUGE-L) to numerically demonstrate model improvement.
+- `train.py`: Handles the QLoRA fine-tuning loop for the model.
+- `infer.py`: Runs model inference and provides side-by-side comparison of the base model vs. the fine-tuned model.
+- `evaluate.py`: Computes validation metrics (such as ROUGE scores) to numerically demonstrate model improvement.
 - `requirements.txt`: Manages python dependencies.
 - `.gitignore`: Prevents checking in weights, logs, cache, or output checkpoints.
 
@@ -74,10 +52,10 @@ Run the training script:
 ```bash
 python train.py
 ```
-This loads the base model in 4-bit, attaches LoRA adapters, processes the new dataset, and saves the adapter weights to `./outputs/`.
+This loads the base model in 4-bit, attaches LoRA adapters, processes the dataset, and saves the adapter weights to `./outputs/`.
 
 ### 3. Evaluation
-Calculate quantitative performance metrics (ROUGE scores, latencies) on the validation set:
+Calculate quantitative performance metrics (ROUGE scores, latencies) on the test/evaluation set:
 ```bash
 python evaluate.py
 ```
@@ -93,4 +71,4 @@ python infer.py
 ## 📈 Deliverables
 - **Codebase:** Pushed to GitHub and cloned onto the AMD Developer Cloud instance.
 - **Model Checkpoints:** Saved locally in `./outputs/` (adapters only, keeping storage usage light).
-- **Evaluation Results:** Extracted in `outputs/eval_results.json` to be used for the 3-5 slide PPT and presentation video.
+- **Evaluation Results:** Extracted in `outputs/eval_results.json` to be used for the presentation slides.
