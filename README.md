@@ -6,9 +6,10 @@ This repository contains a modular codebase for fine-tuning the **Qwen2.5-1.5B-I
 
 ## 📌 Project Overview
 
-- **Dataset:** `sweatSmile/FinanceQA` — 3705 train, 927 test examples
+- **Dataset:** `sweatSmile/FinanceQA` — 3705 train, 927 test examples (gated dataset)
 - **Task:** Context-based Financial Q&A — given company financial data + question, generate accurate answer
 - **Method:** QLoRA fine-tuning on `Qwen2.5-1.5B-Instruct`
+- **Training Optimization:** Completion-only language modeling (`DataCollatorForCompletionOnlyLM`) focusing model loss solely on assistant answers for faster convergence.
 
 ---
 
@@ -41,11 +42,22 @@ To run this project on the AMD Developer Cloud, verify ROCm compatibility:
 
 ## 🚀 Getting Started
 
-### 1. Installation
+### 1. Setup & Installation
 Install the required dependencies:
 ```bash
 pip install -r requirements.txt
 ```
+
+#### Hugging Face Authentication Setup (For Gated Dataset & Models)
+1. Copy the `.env.example` template:
+   ```bash
+   cp .env.example .env
+   ```
+2. Open `.env` and paste your Hugging Face write token:
+   ```env
+   HF_TOKEN=your_huggingface_token_here
+   ```
+   *(The `.env` file is automatically ignored by Git to keep your token secure).*
 
 ### 2. Fine-tuning the Model
 Run the training script:
