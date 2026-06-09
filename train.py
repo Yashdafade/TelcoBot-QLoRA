@@ -15,7 +15,8 @@ from transformers import (
     TrainingArguments,
 )
 from peft import LoraConfig, get_peft_model, TaskType
-from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
+from trl import SFTTrainer
+from transformers import DataCollatorForLanguageModeling
 from datasets import load_dataset
 
 
@@ -24,14 +25,14 @@ MODEL_NAME   = "Qwen/Qwen2.5-1.5B-Instruct"
 DATASET_NAME = "akshayjambhulkar/telecom-conversational-support-chat-pre-processed-with-agent"
 OUTPUT_DIR   = "./outputs"
 
-TRAIN_SAMPLES = 5000   # out of 228k — enough for strong improvement
+TRAIN_SAMPLES = 20000   # out of 228k — enough for strong improvement
 LORA_R        = 16
 LORA_ALPHA    = 32
 LORA_DROPOUT  = 0.05
 EPOCHS        = 3
 BATCH_SIZE    = 4
 LR            = 2e-4
-MAX_SEQ_LEN   = 1024   # conversations are longer than Q&A pairs
+MAX_SEQ_LEN   = 512   # conversations are longer than Q&A pairs
 
 
 # ── QUANTIZATION CONFIG ─────────────────────────────────────
@@ -130,7 +131,7 @@ training_args = TrainingArguments(
     output_dir=OUTPUT_DIR,
     num_train_epochs=EPOCHS,
     per_device_train_batch_size=BATCH_SIZE,
-    gradient_accumulation_steps=4,
+    gradient_accumulation_steps=2,
     learning_rate=LR,
     lr_scheduler_type="cosine",
     warmup_ratio=0.03,
@@ -144,25 +145,24 @@ training_args = TrainingArguments(
 )
 
 print(f"    Epochs             : {EPOCHS}")
-print(f"    Batch size         : {BATCH_SIZE} (effective {BATCH_SIZE * 4} with grad accum)")
+print(f"    Batch size         : {BATCH_SIZE} (effective {BATCH_SIZE * 2} with grad accum)")
 print(f"    Learning rate      : {LR}")
 print(f"    Precision          : bf16")
 print(f"    Optimizer          : paged_adamw_8bit")
 
 
 # ── TRAINER ─────────────────────────────────────────────────
-response_template = "<|im_start|>assistant\n"
-collator = DataCollatorForCompletionOnlyLM(
-    response_template=response_template,
-    tokenizer=tokenizer
+collator = DataCollatorForLanguageModeling(
+    tokenizer=tokenizer,
+    mlm=False
 )
+
+dataset = dataset.rename_column("formatted_text", "text");
 
 trainer = SFTTrainer(
     model=model,
     processing_class=tokenizer,
     train_dataset=dataset,
-    dataset_text_field="formatted_text",
-    max_seq_length=MAX_SEQ_LEN,
     data_collator=collator,
     args=training_args,
 )
