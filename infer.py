@@ -1,75 +1,46 @@
 # ============================================================
-# infer.py — Compare Base Model vs Fine-Tuned Model
-# Run this AFTER train.py has completed
-# Shows side by side output for finance questions
+# infer.py — Base vs Fine-Tuned Model Comparison
+# TelecomLLM — FINETUNING_002
 # ============================================================
 
 import torch
+import time
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import PeftModel
-import os
-from huggingface_hub import login
-
-# Try loading from a .env file if python-dotenv is installed
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
-
-# Read token from environment variables
-hf_token = os.getenv("HF_TOKEN")
-
-# Fallback to Colab secrets if running in Google Colab
-if not hf_token:
-    try:
-        from google.colab import userdata
-        hf_token = userdata.get('HF_TOKEN')
-    except ImportError:
-        pass
-
-if hf_token:
-    login(token=hf_token)
-else:
-    print("Warning: HF_TOKEN not found. Gated model access may fail.")
 
 
 # ── CONFIG ──────────────────────────────────────────────────
 MODEL_NAME     = "Qwen/Qwen2.5-1.5B-Instruct"
 ADAPTER_PATH   = "./outputs"
-MAX_NEW_TOKENS = 256
+MAX_NEW_TOKENS = 300
 
 
 # ── QUANTIZATION ────────────────────────────────────────────
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_compute_dtype=torch.bfloat16,
     bnb_4bit_use_double_quant=True,
 )
 
 
 # ── LOAD TOKENIZER ──────────────────────────────────────────
-print("Loading tokenizer...")
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
 
 # ── GENERATE FUNCTION ───────────────────────────────────────
-def generate_response(model, context, question):
-    # Same format as training — context + question in user turn
-    user_content = f"Context:\n{context}\n\nQuestion: {question}"
-    messages = [{"role": "user", "content": user_content}]
-
-    prompt = tokenizer.apply_chat_template(
+def generate(model, scenario):
+    prompt = "You are a telecom customer support agent. Handle the following support conversation:\n\n" + scenario
+    messages = [{"role": "user", "content": prompt}]
+    formatted = tokenizer.apply_chat_template(
         messages,
         tokenize=False,
         add_generation_prompt=True
     )
-
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
+    inputs = tokenizer(formatted, return_tensors="pt").to(model.device)
+    start = time.time()
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
@@ -80,35 +51,56 @@ def generate_response(model, context, question):
             repetition_penalty=1.1,
             pad_token_id=tokenizer.eos_token_id,
         )
-
+    latency = time.time() - start
     generated = outputs[0][inputs["input_ids"].shape[1]:]
-    return tokenizer.decode(generated, skip_special_tokens=True)
+    response  = tokenizer.decode(generated, skip_special_tokens=True).strip()
+    tokens    = len(generated)
+    return response, latency, tokens
 
 
-# ── COMPARE FUNCTION ────────────────────────────────────────
-def compare(context, question, reference=None):
-    print("\n" + "═" * 60)
-    print(f"QUESTION: {question}")
-    if reference:
-        print(f"REFERENCE ANSWER: {reference}")
-    print("═" * 60)
+# ── PRINT RESULT BLOCK ──────────────────────────────────────
+def print_result(label, response, latency, tokens, is_finetuned=False):
+    tag = "✦ FINETUNED" if is_finetuned else "  BASE     "
+    print(f"\n  ┌─ [{tag}] ─────────────────────────────────────")
+    # Word wrap at 72 chars
+    words = response.split()
+    line  = "  │  "
+    for word in words:
+        if len(line) + len(word) + 1 > 76:
+            print(line)
+            line = "  │  " + word
+        else:
+            line += (" " if line != "  │  " else "") + word
+    if line != "  │  ":
+        print(line)
+    print(f"  │")
+    print(f"  │  Latency : {latency:.2f}s   Tokens : {tokens}")
+    print(f"  └─────────────────────────────────────────────────")
+
+
+# ── COMPARE ─────────────────────────────────────────────────
+def compare(scenario, description):
+    print(f"\n{'═' * 60}")
+    print(f"  SCENARIO : {description}")
+    print(f"{'═' * 60}")
+    print(f"  Input    : {scenario[:120]}{'...' if len(scenario) > 120 else ''}")
+    print(f"{'─' * 60}")
 
     # Base model
-    print("\nLoading BASE model...")
+    print("\n  Loading base model...")
     base_model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
         quantization_config=bnb_config,
         device_map="auto",
         trust_remote_code=True,
     )
-    base_response = generate_response(base_model, context, question)
-    print(f"\n[BASE MODEL]\n{base_response}")
-
+    base_resp, base_lat, base_tok = generate(base_model, scenario)
+    print_result("BASE", base_resp, base_lat, base_tok, is_finetuned=False)
     del base_model
     torch.cuda.empty_cache()
 
     # Fine-tuned model
-    print("\nLoading FINE-TUNED model...")
+    print("\n  Loading fine-tuned model...")
     ft_model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
         quantization_config=bnb_config,
@@ -116,49 +108,55 @@ def compare(context, question, reference=None):
         trust_remote_code=True,
     )
     ft_model = PeftModel.from_pretrained(ft_model, ADAPTER_PATH)
-
-    ft_response = generate_response(ft_model, context, question)
-    print(f"\n[FINE-TUNED — FinSense]\n{ft_response}")
-
+    ft_resp, ft_lat, ft_tok = generate(ft_model, scenario)
+    print_result("FINETUNED", ft_resp, ft_lat, ft_tok, is_finetuned=True)
     del ft_model
     torch.cuda.empty_cache()
 
-    print("\n" + "═" * 60)
+    # Delta summary
+    lat_delta = ((ft_lat - base_lat) / base_lat) * 100
+    tok_delta = ((ft_tok - base_tok) / base_tok) * 100
+    print(f"\n  ┌─ DELTA ──────────────────────────────────────────")
+    print(f"  │  Latency : {base_lat:.2f}s → {ft_lat:.2f}s  ({lat_delta:+.1f}%)")
+    print(f"  │  Tokens  : {base_tok}  → {ft_tok}  ({tok_delta:+.1f}%)")
+    print(f"  └──────────────────────────────────────────────────")
 
 
-# ── TEST EXAMPLES ───────────────────────────────────────────
-# Real examples from the dataset — these are unseen test cases
-# The fine-tuned model should answer more accurately and concisely
-
-examples = [
+# ── TEST SCENARIOS ──────────────────────────────────────────
+scenarios = [
     {
-        "context": "Symbol: INFY Company Name: Infosys Ltd. Equity Share Capital: 2079 Total Share Capital: 2079 Reserves and Surplus: 74710 Total Reserves and Surplus: 74710 Total Shareholders Funds: 76789 Long Term Borrowings: 0 Total Non-Current Liabilities: 458 Trade Payables: 3200 Total Current Liabilities: 18435 Total Capital And Liabilities: 95682",
-        "question": "What is the total shareholders fund of the company?",
-        "reference": "The total shareholders fund of the company is 76789."
+        "description": "VPN Connectivity Issue",
+        "input": "client: Hi, I'm having trouble connecting to my VPN on my mobile. It worked fine yesterday but now it just times out.\nagent:"
     },
     {
-        "context": "Symbol: TCS Company Name: Tata Consultancy Services Ltd. Revenue From Operations: 213200 Other Income: 4200 Total Revenue: 217400 Employee Benefit Expense: 112000 Total Expenses: 168900 Profit Before Tax: 48500 Tax Expense: 12100 Profit After Tax: 36400",
-        "question": "What is the profit after tax of the company?",
-        "reference": "The profit after tax of the company is 36400."
+        "description": "International Roaming Setup",
+        "input": "client: I'm traveling to Germany next week. How do I make sure my phone works there and what will the charges be?\nagent:"
     },
     {
-        "context": "Symbol: RELIANCE Company Name: Reliance Industries Ltd. Total Assets: 1650000 Total Non-Current Assets: 980000 Total Current Assets: 670000 Cash And Cash Equivalents: 85000 Short Term Borrowings: 45000 Long Term Borrowings: 230000 Total Debt: 275000",
-        "question": "What is the total debt of the company?",
-        "reference": "The total debt of the company is 275000."
+        "description": "Bill Dispute — Unexpected Charges",
+        "input": "client: I just got my bill and there's a charge of $45 for data overage but I have an unlimited plan. This doesn't make sense.\nagent:"
     },
     {
-        "context": "Symbol: HDFC Company Name: HDFC Bank Ltd. Net Interest Income: 85000 Other Income: 22000 Operating Expenses: 45000 Provisions: 12000 Profit Before Tax: 50000 Tax: 12500 Net Profit: 37500 Total Assets: 1800000 Gross NPA: 9200 Net NPA: 3100",
-        "question": "What is the Net NPA of the company?",
-        "reference": "The Net NPA of the company is 3100."
+        "description": "SIM Replacement Request",
+        "input": "client: My SIM card is damaged and my phone isn't reading it. I need a replacement urgently as I use it for work.\nagent:"
+    },
+    {
+        "description": "5G Network Not Working",
+        "input": "client: I upgraded to a 5G plan last week but my phone still shows 4G. I have a 5G compatible phone. What's going on?\nagent:"
     },
 ]
 
+
 # ── RUN ─────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("FinSense LLM — Base vs Fine-Tuned Comparison")
-    print("=" * 60)
+    print("\n" + "═" * 60)
+    print("  TelecomLLM — Base vs Fine-Tuned Comparison")
+    print("  Use Case : FINETUNING_002")
+    print("═" * 60)
 
-    for ex in examples:
-        compare(ex["context"], ex["question"], ex.get("reference"))
+    for s in scenarios:
+        compare(s["input"], s["description"])
 
-    print("\nDone. Record this output for your demo video.")
+    print(f"\n{'═' * 60}")
+    print("  Inference complete. Run evaluate.py for ROUGE metrics.")
+    print(f"{'═' * 60}\n")

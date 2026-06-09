@@ -1,87 +1,59 @@
 # ============================================================
-# train.py — QLoRA Fine-tuning for Finance Q&A LLM
+# train.py — QLoRA Fine-tuning for Telecom Support LLM
 # Model  : Qwen2.5-1.5B-Instruct
 # Method : QLoRA (4-bit quantization + LoRA adapters)
-# Data   : sweatSmile/FinanceQA
+# Data   : akshayjambhulkar/telecom-conversational-support-chat-pre-processed-with-agent
+# Use Case: FINETUNING_002 — Telco Specific Customer LLM
 # ============================================================
 
-# ── 1. IMPORTS ──────────────────────────────────────────────
 import os
 import torch
-
-from huggingface_hub import login
-
-# Try loading from a .env file if python-dotenv is installed
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
-
-# Read token from environment variables (for AMD Cloud, Local, or other clouds)
-hf_token = os.getenv("HF_TOKEN")
-
-# Fallback to Colab secrets if running in Google Colab
-if not hf_token:
-    try:
-        from google.colab import userdata
-        hf_token = userdata.get('HF_TOKEN')
-    except ImportError:
-        pass
-
-if hf_token:
-    login(token=hf_token)
-else:
-    print("Warning: HF_TOKEN not found. Gated dataset access may fail.")
-
-
 from transformers import (
-    AutoModelForCausalLM,   # loads the LLM
-    AutoTokenizer,           # loads the tokenizer (text → tokens)
-    BitsAndBytesConfig,      # controls 4-bit quantization
-    TrainingArguments,       # all training hyperparameters
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    TrainingArguments,
 )
-
 from peft import LoraConfig, get_peft_model, TaskType
 from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
 from datasets import load_dataset
 
 
-# ── 2. CONFIGURATION ────────────────────────────────────────
-MODEL_NAME   = "Qwen/Qwen2.5-1.5B-Instruct"  # base model to fine-tune
-DATASET_NAME = "sweatSmile/FinanceQA"         # finance Q&A dataset
-OUTPUT_DIR   = "./outputs"                     # where to save fine-tuned model
+# ── CONFIGURATION ───────────────────────────────────────────
+MODEL_NAME   = "Qwen/Qwen2.5-1.5B-Instruct"
+DATASET_NAME = "akshayjambhulkar/telecom-conversational-support-chat-pre-processed-with-agent"
+OUTPUT_DIR   = "./outputs"
 
-# Dataset has 3705 train examples — use all of them
-# Small dataset = more epochs needed to see improvement
-TRAIN_SAMPLES = 3705
-
-# LoRA hyperparameters
-LORA_R       = 16     # rank of adapter matrices
-LORA_ALPHA   = 32     # scaling factor (always 2x rank)
-LORA_DROPOUT = 0.05   # regularization dropout
-
-# Training hyperparameters
-EPOCHS      = 3       # 3 epochs since dataset is small (3705 examples)
-BATCH_SIZE  = 4       # examples processed at once
-LR          = 2e-4    # learning rate
-MAX_SEQ_LEN = 768     # increased from 512 — finance context strings are longer
+TRAIN_SAMPLES = 5000   # out of 228k — enough for strong improvement
+LORA_R        = 16
+LORA_ALPHA    = 32
+LORA_DROPOUT  = 0.05
+EPOCHS        = 3
+BATCH_SIZE    = 4
+LR            = 2e-4
+MAX_SEQ_LEN   = 1024   # conversations are longer than Q&A pairs
 
 
-# ── 3. QUANTIZATION CONFIG ──────────────────────────────────
+# ── QUANTIZATION CONFIG ─────────────────────────────────────
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_compute_dtype=torch.bfloat16,
     bnb_4bit_use_double_quant=True,
 )
 
 
-# ── 4. LOAD MODEL + TOKENIZER ───────────────────────────────
-print("Loading model and tokenizer...")
+# ── LOAD MODEL + TOKENIZER ──────────────────────────────────
+print("\n" + "═" * 60)
+print("  TelecomLLM — QLoRA Fine-Tuning Pipeline")
+print("  Use Case : FINETUNING_002 — Telco Customer LLM")
+print("  Model    : Qwen2.5-1.5B-Instruct")
+print("  Method   : QLoRA (4-bit NF4 + LoRA Adapters)")
+print("═" * 60)
+
+print("\n[1/5] Loading tokenizer and base model...")
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
-
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
@@ -92,14 +64,16 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto",
     trust_remote_code=True,
 )
-
 model.config.use_cache = False
 model.config.pretraining_tp = 1
 
-print(f"Model loaded. Parameters: {model.num_parameters():,}")
+print(f"    Base model loaded  : {MODEL_NAME}")
+print(f"    Total parameters   : {model.num_parameters():,}")
 
 
-# ── 5. LORA CONFIG ──────────────────────────────────────────
+# ── LORA CONFIG ─────────────────────────────────────────────
+print("\n[2/5] Applying LoRA adapters...")
+
 lora_config = LoraConfig(
     r=LORA_R,
     lora_alpha=LORA_ALPHA,
@@ -108,49 +82,50 @@ lora_config = LoraConfig(
     task_type=TaskType.CAUSAL_LM,
     target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
 )
-
 model = get_peft_model(model, lora_config)
-model.print_trainable_parameters()
+
+trainable, total = model.get_nb_trainable_parameters()
+print(f"    Trainable params   : {trainable:,} ({100 * trainable / total:.3f}% of total)")
+print(f"    LoRA rank          : r={LORA_R}, alpha={LORA_ALPHA}")
+print(f"    Target modules     : q/k/v/o_proj + gate/up/down_proj (MLP)")
 
 
-# ── 6. LOAD + FORMAT DATASET ────────────────────────────────
-print("Loading dataset...")
+# ── LOAD + FORMAT DATASET ───────────────────────────────────
+print(f"\n[3/5] Loading dataset ({TRAIN_SAMPLES} examples)...")
 
-dataset = load_dataset(DATASET_NAME, split="train")
+dataset = load_dataset(DATASET_NAME, split=f"train[:{TRAIN_SAMPLES}]")
 
-# This dataset has QUERY, ANSWER, CONTEXT columns — not chat format
-# We build the chat messages manually:
-# - user turn  = CONTEXT (financial data) + QUERY (question)
-# - assistant  = ANSWER
-# Including CONTEXT is important — it gives the model the financial figures
-# to reason over, not just memorize answers
+# Dataset has 'text' column with full agent-client conversations
+# Format: "agent: ... client: ... agent: ..."
+# We wrap each conversation in the chat template as a single user turn
+# The model learns the full support conversation pattern
 
 def format_chat(example):
-    # Combine context + query into user message
-    # This mirrors how the model would be used in production:
-    # user provides financial data + asks a question
-    user_content = f"Context:\n{example['CONTEXT']}\n\nQuestion: {example['QUERY']}"
-
     messages = [
-        {"role": "user",      "content": user_content},
-        {"role": "assistant", "content": example["ANSWER"]},
+        {
+            "role": "user",
+            "content": "You are a telecom customer support agent. Handle the following support conversation:\n\n" + example["text"]
+        }
     ]
-
     text = tokenizer.apply_chat_template(
         messages,
         tokenize=False,
         add_generation_prompt=False
     )
-    return {"text": text}
+    return {"formatted_text": text}
 
-dataset = dataset.map(format_chat)
-print(f"Dataset loaded. {len(dataset)} examples.")
-print("Sample formatted example:")
-print(dataset[0]["text"][:500], "...")   # print first 500 chars only
-print("─" * 60)
+dataset = dataset.map(format_chat, remove_columns=["conversation_id", "text"])
+
+print(f"    Dataset loaded     : {DATASET_NAME}")
+print(f"    Training examples  : {len(dataset)}")
+print(f"    Sample preview     :")
+preview = dataset[0]["formatted_text"][:300].replace("\n", " ")
+print(f"    {preview}...")
 
 
-# ── 7. TRAINING ARGUMENTS ───────────────────────────────────
+# ── TRAINING ARGUMENTS ──────────────────────────────────────
+print("\n[4/5] Configuring training...")
+
 training_args = TrainingArguments(
     output_dir=OUTPUT_DIR,
     num_train_epochs=EPOCHS,
@@ -161,40 +136,55 @@ training_args = TrainingArguments(
     warmup_ratio=0.03,
     weight_decay=0.001,
     bf16=True,
-    logging_steps=25,          # log more frequently (smaller dataset)
+    logging_steps=25,
     save_steps=200,
     save_total_limit=2,
     report_to="none",
     optim="paged_adamw_8bit",
 )
 
+print(f"    Epochs             : {EPOCHS}")
+print(f"    Batch size         : {BATCH_SIZE} (effective {BATCH_SIZE * 4} with grad accum)")
+print(f"    Learning rate      : {LR}")
+print(f"    Precision          : bf16")
+print(f"    Optimizer          : paged_adamw_8bit")
 
-# ── 8. TRAINER ──────────────────────────────────────────────
-# Train only on the assistant's answers, ignoring loss on the prompt context
+
+# ── TRAINER ─────────────────────────────────────────────────
 response_template = "<|im_start|>assistant\n"
-collator = DataCollatorForCompletionOnlyLM(response_template=response_template, tokenizer=tokenizer)
+collator = DataCollatorForCompletionOnlyLM(
+    response_template=response_template,
+    tokenizer=tokenizer
+)
 
 trainer = SFTTrainer(
     model=model,
     processing_class=tokenizer,
     train_dataset=dataset,
+    dataset_text_field="formatted_text",
+    max_seq_length=MAX_SEQ_LEN,
     data_collator=collator,
     args=training_args,
 )
 
 
-# ── 9. TRAIN ────────────────────────────────────────────────
-print("Starting training...")
-print(f"Training on {len(dataset)} examples for {EPOCHS} epochs")
-print(f"LoRA rank={LORA_R}, alpha={LORA_ALPHA}")
+# ── TRAIN ───────────────────────────────────────────────────
+print("\n[5/5] Starting training...\n")
+print("─" * 60)
+print(f"  {'Step':<8} {'Loss':<12} {'Progress'}")
 print("─" * 60)
 
 trainer.train()
 
 
-# ── 10. SAVE ────────────────────────────────────────────────
-print("Saving fine-tuned model...")
+# ── SAVE ────────────────────────────────────────────────────
+print("\n" + "─" * 60)
+print("\nSaving fine-tuned LoRA adapters...")
 trainer.model.save_pretrained(OUTPUT_DIR)
 tokenizer.save_pretrained(OUTPUT_DIR)
-print(f"Model saved to {OUTPUT_DIR}")
-print("Training complete.")
+
+print(f"\n{'═' * 60}")
+print(f"  Training complete!")
+print(f"  Model saved to     : {OUTPUT_DIR}")
+print(f"  Run infer.py next  : python infer.py")
+print(f"{'═' * 60}\n")

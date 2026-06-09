@@ -1,13 +1,13 @@
-# Financial Q&A LLM Fine-Tuning on AMD GPUs
+# Telecom Support LLM Fine-Tuning on AMD GPUs
 
-This repository contains a modular codebase for fine-tuning the **Qwen2.5-1.5B-Instruct** model on financial data to perform context-based question answering. This project is configured to run on the **AMD Developer Cloud** utilizing the **ROCm ecosystem** for hardware acceleration on AMD GPUs.
+This repository contains a modular codebase for fine-tuning the **Qwen2.5-1.5B-Instruct** model on telecom customer support conversations to handle customer inquiries effectively. This project is configured to run on the **AMD Developer Cloud** utilizing the **ROCm ecosystem** for hardware acceleration on AMD GPUs.
 
 ---
 
 ## 📌 Project Overview
 
-- **Dataset:** `sweatSmile/FinanceQA` — 3705 train, 927 test examples (gated dataset)
-- **Task:** Context-based Financial Q&A — given company financial data + question, generate accurate answer
+- **Dataset:** `akshayjambhulkar/telecom-conversational-support-chat-pre-processed-with-agent`
+- **Task:** Conversational Telecom Support — act as a customer support agent to resolve issues like VPN connectivity, roaming, SIM replacements, and billing disputes.
 - **Method:** QLoRA fine-tuning on `Qwen2.5-1.5B-Instruct`
 - **Training Optimization:** Completion-only language modeling (`DataCollatorForCompletionOnlyLM`) focusing model loss solely on assistant answers for faster convergence.
 
@@ -17,7 +17,7 @@ This repository contains a modular codebase for fine-tuning the **Qwen2.5-1.5B-I
 
 The codebase is modularly structured:
 - `train.py`: Handles the QLoRA fine-tuning loop for the model.
-- `infer.py`: Runs model inference and provides side-by-side comparison of the base model vs. the fine-tuned model.
+- `infer.py`: Runs model inference and provides side-by-side comparison of the base model vs. the fine-tuned model across various telecom support scenarios.
 - `evaluate.py`: Computes validation metrics (such as ROUGE scores) to numerically demonstrate model improvement.
 - `requirements.txt`: Manages python dependencies.
 - `.gitignore`: Prevents checking in weights, logs, cache, or output checkpoints.
