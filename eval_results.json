@@ -1,0 +1,21 @@
+{
+  "base_model": {
+    "model": "Base Qwen2.5-1.5B",
+    "rouge1_avg": 0.30684706427102876,
+    "rouge2_avg": 0.06951702703650285,
+    "rougeL_avg": 0.156422814844492,
+    "avg_latency_sec": 2.829706861972809,
+    "avg_tokens": 128.83
+  },
+  "fine_tuned_model": {
+    "model": "TelecomLLM (Fine-Tuned)",
+    "rouge1_avg": 0.43251070948966025,
+    "rouge2_avg": 0.17109540501304835,
+    "rougeL_avg": 0.24845184002318293,
+    "avg_latency_sec": 7.3854155707359315,
+    "avg_tokens": 170.55
+  },
+  "eval_samples": 100,
+  "dataset": "akshayjambhulkar/telecom-conversational-support-chat-pre-processed-with-agent",
+  "eval_range": "train[5000:5100]"
+}
