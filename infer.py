@@ -16,12 +16,12 @@ MAX_NEW_TOKENS = 300
 
 
 # ── QUANTIZATION ────────────────────────────────────────────
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_use_double_quant=True,
-)
+# bnb_config = BitsAndBytesConfig(
+#     load_in_4bit=True,
+#     bnb_4bit_quant_type="nf4",
+#     bnb_4bit_compute_dtype=torch.bfloat16,
+#     bnb_4bit_use_double_quant=True,
+# )
 
 
 # ── LOAD TOKENIZER ──────────────────────────────────────────
@@ -83,17 +83,17 @@ def compare(scenario, description):
     print(f"\n{'═' * 60}")
     print(f"  SCENARIO : {description}")
     print(f"{'═' * 60}")
-    print(f"  Input    : {scenario[:120]}{'...' if len(scenario) > 120 else ''}")
+    print(f"  Input    : {scenario}{'...' if len(scenario) > 120 else ''}")
     print(f"{'─' * 60}")
 
     # Base model
     print("\n  Loading base model...")
     base_model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME,
-        quantization_config=bnb_config,
-        device_map="auto",
-        trust_remote_code=True,
-    )
+    MODEL_NAME,
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    trust_remote_code=True,
+)
     base_resp, base_lat, base_tok = generate(base_model, scenario)
     print_result("BASE", base_resp, base_lat, base_tok, is_finetuned=False)
     del base_model
@@ -103,7 +103,7 @@ def compare(scenario, description):
     print("\n  Loading fine-tuned model...")
     ft_model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
-        quantization_config=bnb_config,
+        torch_dtype=torch.bfloat16,
         device_map="auto",
         trust_remote_code=True,
     )

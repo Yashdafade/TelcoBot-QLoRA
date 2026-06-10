@@ -121,7 +121,7 @@ print(f"  Loaded {len(eval_dataset)} examples (unseen during training)")
 print("\n  ┌─ Phase 1: Base Model ─────────────────────────────")
 base_model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
-    quantization_config=bnb_config,
+    torch_dtype=torch.bfloat16,
     device_map="auto",
     trust_remote_code=True,
 )
@@ -135,7 +135,7 @@ print("  └──────────────────────�
 print("\n  ┌─ Phase 2: Fine-Tuned Model ───────────────────────")
 ft_model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
-    quantization_config=bnb_config,
+    torch_dtype=torch.bfloat16,
     device_map="auto",
     trust_remote_code=True,
 )

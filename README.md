@@ -1,86 +1,88 @@
-# Telecom Support LLM Fine-Tuning on AMD GPUs
+# TelcoBot-QLoRA: Telecom Support LLM Fine-Tuning
 
-This repository contains a modular codebase for fine-tuning the **Qwen2.5-1.5B-Instruct** model on telecom customer support conversations to handle customer inquiries effectively. This project is configured to run on the **AMD Developer Cloud** utilizing the **ROCm ecosystem** for hardware acceleration on AMD GPUs.
+## 1. Problem Statement
+Telecom customer support centers handle massive volumes of repetitive inquiries (e.g., VPN connectivity, international roaming, billing disputes, SIM replacements). Standard LLMs often fail to adopt the appropriate tone, brevity, and specific domain knowledge required for effective customer service. The goal of this project is to fine-tune a lightweight instruction model (`Qwen2.5-1.5B-Instruct`) to act as a highly capable and polite telecom customer support agent that provides concise and accurate resolutions.
 
----
+## 2. Architecture Diagram
 
-## 📌 Project Overview
+```mermaid
+graph TD
+    A[Dataset: Telecom Chats] -->|Format as User/Agent| B(Tokenizer)
+    C[Base Model: Qwen2.5-1.5B] -->|Load in bfloat16| D[PEFT / LoRA Adapters]
+    B --> E[SFTTrainer]
+    D --> E
+    E -->|Train Objective: Language Modeling| F((Fine-Tuned Adapter Weights))
+    F -->|Merge with Base| G[TelcoBot LLM]
+    G --> H[Evaluation & Inference]
+```
 
-- **Dataset:** `akshayjambhulkar/telecom-conversational-support-chat-pre-processed-with-agent`
-- **Task:** Conversational Telecom Support — act as a customer support agent to resolve issues like VPN connectivity, roaming, SIM replacements, and billing disputes.
-- **Method:** QLoRA fine-tuning on `Qwen2.5-1.5B-Instruct`
-- **Training Optimization:** Utilizes `DataCollatorForLanguageModeling` along with parameter adjustments (e.g., increased training samples to 20,000, reduced sequence lengths and gradient accumulation steps) specifically tuned to accommodate AMD GPU constraints on Jupyter Notebooks.
+## 3. Dataset
+- **Name:** `akshayjambhulkar/telecom-conversational-support-chat-pre-processed-with-agent`
+- **Description:** A dataset containing real-world simulated telecom customer support chat logs between clients and support agents.
+- **Format:** The raw conversations are reformatted into a chat template where the system prompts the model to handle the incoming client issues specifically as a telecom agent.
 
----
+## 4. Fine-tuning Approach (QLoRA)
+- **Base Model:** `Qwen/Qwen2.5-1.5B-Instruct`
+- **Method:** Parameter-Efficient Fine-Tuning (PEFT) using Low-Rank Adaptation (LoRA).
+- **Optimization Strategy:** To accommodate hardware constraints on the AMD Developer Cloud (ROCm) and Jupyter Notebook environments, the pipeline is optimized to load the model in native `bfloat16` precision (bypassing 4-bit quantization overhead). The training utilizes standard `DataCollatorForLanguageModeling`.
 
-## 🛠️ Project Architecture & State
+## 5. Training Parameters
+To ensure training stability and strong performance within hardware constraints, the following hyperparameters are configured in `train.py`:
+- **Training Samples:** 20,000
+- **LoRA Rank (r):** 16
+- **LoRA Alpha:** 32
+- **LoRA Dropout:** 0.05
+- **Target Modules:** `q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj`
+- **Epochs:** 3
+- **Batch Size:** 4 (Effective batch size: 8 via gradient accumulation steps of 2)
+- **Max Sequence Length:** 512 tokens
+- **Learning Rate:** 2e-4 (Cosine Scheduler with 0.03 warmup ratio)
+- **Optimizer:** `paged_adamw_8bit`
 
-The codebase is modularly structured:
-- `train.py`: Handles the QLoRA fine-tuning loop for the model.
-- `infer.py`: Runs model inference and provides side-by-side comparison of the base model vs. the fine-tuned model across various telecom support scenarios.
-- `evaluate.py`: Computes validation metrics (such as ROUGE scores) to numerically demonstrate model improvement.
-- `requirements.txt`: Manages python dependencies.
-- `.gitignore`: Prevents checking in weights, logs, cache, or output checkpoints.
+## 6. Evaluation Metrics
+Model performance is evaluated numerically using `evaluate.py`. The fine-tuned TelcoBot is evaluated against the base Qwen model across:
+- **ROUGE Scores (ROUGE-1, ROUGE-2, ROUGE-L):** Measures overlap and coherence against the ground-truth agent responses in the test set.
+- **Latency (Seconds):** Tracks inference speed improvements.
+- **Token Count:** Evaluates the conciseness of the response (preventing overly verbose or rambling outputs).
 
----
+## 7. Sample Results
+During inference (`infer.py`), the model effectively solves telecom issues while strictly staying in character. 
 
-## ⚡ AMD Hardware & Environment (ROCm)
+**Scenario:** VPN Connectivity Issue
+* **Input:** `client: Hi, I'm having trouble connecting to my VPN on my mobile. It worked fine yesterday but now it just times out.`
+* **TelcoBot Output:** `agent: Hello! I'm sorry to hear you're experiencing trouble with your VPN connection. I can definitely help look into this for you. Are you connected to Wi-Fi or cellular data?`
 
-To run this project on the AMD Developer Cloud, verify ROCm compatibility:
-1. Ensure the ROCm-compatible version of PyTorch is installed:
+
+## 8. How to Run
+
+### Setup Environment
+1. Ensure ROCm-compatible PyTorch is installed (for AMD GPUs):
    ```bash
    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
    ```
-2. Verify PyTorch detects your AMD GPU:
-   ```python
-   import torch
-   print("ROCm / CUDA Available:", torch.cuda.is_available())
-   print("Device Name:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "None")
+2. Install standard dependencies:
+   ```bash
+   pip install -r requirements.txt
    ```
-
----
-
-## 🚀 Getting Started
-
-### 1. Setup & Installation
-Install the required dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-#### Hugging Face Authentication Setup (For Gated Dataset & Models)
-1. Copy the `.env.example` template:
+3. Set up your Hugging Face Token:
    ```bash
    cp .env.example .env
    ```
-2. Open `.env` and paste your Hugging Face write token:
-   ```env
-   HF_TOKEN=your_huggingface_token_here
-   ```
-   *(The `.env` file is automatically ignored by Git to keep your token secure).*
+   *Open `.env` and paste your `HF_TOKEN`.*
 
-### 2. Fine-tuning the Model
-Run the training script:
-```bash
-python train.py
-```
-This loads the base model in 4-bit, attaches LoRA adapters, processes the dataset, and saves the adapter weights to `./outputs/`.
+### Execution
+- **Train the Model:** 
+  ```bash
+  python train.py
+  ```
+  *Saves LoRA adapters to `./outputs/`.*
 
-### 3. Evaluation
-Calculate quantitative performance metrics (ROUGE scores, latencies) on the test/evaluation set:
-```bash
-python evaluate.py
-```
+- **Evaluate the Model (Metrics):** 
+  ```bash
+  python evaluate.py
+  ```
 
-### 4. Interactive Inference
-Compare the base model and fine-tuned model on sample test questions:
-```bash
-python infer.py
-```
-
----
-
-## 📈 Deliverables
-- **Codebase:** Pushed to GitHub and cloned onto the AMD Developer Cloud instance.
-- **Model Checkpoints:** Saved locally in `./outputs/` (adapters only, keeping storage usage light).
-- **Evaluation Results:** Extracted in `outputs/eval_results.json` to be used for the presentation slides.
+- **Test Inference (Interactive):** 
+  ```bash
+  python infer.py
+  ```
