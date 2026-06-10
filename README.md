@@ -3,6 +3,27 @@
 ## 1. Problem Statement
 Telecom customer support centers handle massive volumes of repetitive inquiries (e.g., VPN connectivity, international roaming, billing disputes, SIM replacements). Standard LLMs often fail to adopt the appropriate tone, brevity, and specific domain knowledge required for effective customer service. The goal of this project is to fine-tune a lightweight instruction model (`Qwen2.5-1.5B-Instruct`) to act as a highly capable and polite telecom customer support agent that provides concise and accurate resolutions.
 
+---
+
+## 📊 Results
+
+Evaluated on **100 unseen telecom conversations** (test split):
+
+| Metric | Base Qwen2.5-1.5B | TelecomLLM (Fine-Tuned) | Improvement |
+|--------|-------------------|--------------------------|-------------|
+| ROUGE-1 | 0.307 | 0.433 | **+41.0%** |
+| ROUGE-2 | 0.069 | 0.171 | **+146.1%** |
+| ROUGE-L | 0.156 | 0.248 | **+58.8%** |
+
+**Training Setup:**
+- Hardware: 1× AMD Instinct MI300X (192GB VRAM)
+- Method: QLoRA — 4-bit NF4 quantization + LoRA adapters (r=16, α=32)
+- Trainable params: 4.36M (0.28% of 1.54B base)
+- Training time: 1 hour 41 minutes
+- Final loss: 0.46 (from 1.61, -71% reduction)
+
+---
+
 ## 2. Architecture Diagram
 
 ```mermaid
@@ -56,10 +77,7 @@ During inference (`infer.py`), the model effectively solves telecom issues while
 ## 8. How to Run
 
 ### Setup Environment
-1. Ensure ROCm-compatible PyTorch is installed (for AMD GPUs):
-   ```bash
-   pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
-   ```
+1. **PyTorch & ROCm:** If you are running on AMD AI Notebooks, PyTorch and ROCm are pre-installed, so no manual installation is necessary. If running locally, install a ROCm-compatible PyTorch (e.g., ROCm 6.2 or 7.0).
 2. Install standard dependencies:
    ```bash
    pip install -r requirements.txt

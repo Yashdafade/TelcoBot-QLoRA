@@ -50,10 +50,15 @@ def generate(model, scenario):
             top_p=0.9,
             repetition_penalty=1.1,
             pad_token_id=tokenizer.eos_token_id,
+            stop_strings=["client:", "\nclient"],
+            tokenizer=tokenizer,
         )
     latency = time.time() - start
     generated = outputs[0][inputs["input_ids"].shape[1]:]
-    response  = tokenizer.decode(generated, skip_special_tokens=True).strip()
+    response = tokenizer.decode(generated, skip_special_tokens=True).strip()
+    response = response.replace("client:", "").strip()
+    if response.endswith("client"):
+        response = response[:-6].strip()
     tokens    = len(generated)
     return response, latency, tokens
 
@@ -125,24 +130,12 @@ def compare(scenario, description):
 # ── TEST SCENARIOS ──────────────────────────────────────────
 scenarios = [
     {
-        "description": "VPN Connectivity Issue",
-        "input": "client: Hi, I'm having trouble connecting to my VPN on my mobile. It worked fine yesterday but now it just times out.\nagent:"
+        "description": "eSIM Transfer Between Devices",
+        "input": "client: I want to transfer my eSIM from my old phone to my new Samsung Galaxy S24. The old phone is broken so I can't access it anymore. Can you help?\nagent:"
     },
     {
-        "description": "International Roaming Setup",
-        "input": "client: I'm traveling to Germany next week. How do I make sure my phone works there and what will the charges be?\nagent:"
-    },
-    {
-        "description": "Bill Dispute — Unexpected Charges",
-        "input": "client: I just got my bill and there's a charge of $45 for data overage but I have an unlimited plan. This doesn't make sense.\nagent:"
-    },
-    {
-        "description": "SIM Replacement Request",
-        "input": "client: My SIM card is damaged and my phone isn't reading it. I need a replacement urgently as I use it for work.\nagent:"
-    },
-    {
-        "description": "5G Network Not Working",
-        "input": "client: I upgraded to a 5G plan last week but my phone still shows 4G. I have a 5G compatible phone. What's going on?\nagent:"
+        "description": "International Roaming Activation Failed",
+        "input": "client: I activated international roaming for my Europe trip but I land tomorrow and the activation shows pending for 4 hours now. My account number is 8847291.\nagent:"
     },
 ]
 
