@@ -45,7 +45,7 @@ graph TD
 ## 4. Fine-tuning Approach (QLoRA)
 - **Base Model:** `Qwen/Qwen2.5-1.5B-Instruct`
 - **Method:** Parameter-Efficient Fine-Tuning (PEFT) using Low-Rank Adaptation (LoRA).
-- **Optimization Strategy:** To accommodate hardware constraints on the AMD Developer Cloud (ROCm) and Jupyter Notebook environments, the pipeline is optimized to load the model in native `bfloat16` precision (bypassing 4-bit quantization overhead). The training utilizes standard `DataCollatorForLanguageModeling`.
+- **Optimization Strategy:** To support training efficiency, the model is loaded in 4-bit NF4 quantization for fine-tuning (QLoRA). However, to maximize speed and minimize latency during inference (`infer.py`) and evaluation (`evaluate.py`), the model is loaded in native `bfloat16` precision, bypassing 4-bit quantization overhead. The training utilizes standard `DataCollatorForLanguageModeling` and parameter tuning tailored for AMD GPU environments.
 
 ## 5. Training Parameters
 To ensure training stability and strong performance within hardware constraints, the following hyperparameters are configured in `train.py`:

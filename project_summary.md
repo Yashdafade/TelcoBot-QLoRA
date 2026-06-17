@@ -4,7 +4,7 @@
 
 **Dataset:** `akshayjambhulkar/telecom-conversational-support-chat-pre-processed-with-agent`
 
-**Methodology:** QLoRA (Low-Rank Adaptation) fine-tuning optimized for the AMD Developer Cloud (ROCm) using native `bfloat16` precision.
+**Methodology:** QLoRA (Low-Rank Adaptation) fine-tuning using 4-bit NF4 quantization on AMD Instinct MI300X, optimized to use native `bfloat16` precision during inference and evaluation to bypass quantization latency overhead.
 
 ### ⚙️ Key Components
 - **`train.py`**: SFTTrainer implementation with custom hyperparameter tuning (20k samples, batch size 4x2).
