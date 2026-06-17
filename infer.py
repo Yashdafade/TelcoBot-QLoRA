@@ -50,10 +50,15 @@ def generate(model, scenario):
             top_p=0.9,
             repetition_penalty=1.1,
             pad_token_id=tokenizer.eos_token_id,
+            stop_strings=["client:", "\nclient"],
+            tokenizer=tokenizer,
         )
     latency = time.time() - start
     generated = outputs[0][inputs["input_ids"].shape[1]:]
     response = tokenizer.decode(generated, skip_special_tokens=True).strip()
+    response = response.replace("client:", "").strip()
+    if response.endswith("client"):
+        response = response[:-6].strip()
     tokens    = len(generated)
     return response, latency, tokens
 
