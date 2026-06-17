@@ -45,7 +45,7 @@ def generate(model, scenario):
         outputs = model.generate(
             **inputs,
             max_new_tokens=MAX_NEW_TOKENS,
-            temperature=0.7,
+            temperature=0.3,
             do_sample=True,
             top_p=0.9,
             repetition_penalty=1.1,
@@ -129,14 +129,14 @@ def compare(scenario, description):
 
 # ── TEST SCENARIOS ──────────────────────────────────────────
 scenarios = [
-    {
-        "description": "eSIM Transfer Between Devices",
-        "input": "client: I want to transfer my eSIM from my old phone to my new Samsung Galaxy S24. The old phone is broken so I can't access it anymore. Can you help?\nagent:"
-    },
-    {
-        "description": "International Roaming Activation Failed",
-        "input": "client: I activated international roaming for my Europe trip but I land tomorrow and the activation shows pending for 4 hours now. My account number is 8847291.\nagent:"
-    },
+{
+    "description": "eSIM Transfer Between Devices",
+    "input": "client: I want to transfer my eSIM from my old phone to my new Samsung Galaxy S24. The old phone is broken so I can't access it anymore. Can you help?\nagent:"
+},
+{
+    "description": "Unexpected Bill Charge",
+    "input": "client: My bill this month is $30 higher than usual and I don't understand why. I haven't changed my plan or used anything extra. Can you explain these charges?\nagent:"
+},
 ]
 
 
